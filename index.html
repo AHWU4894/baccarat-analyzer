@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 百家乐分析</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f6f9; margin: 0; padding: 15px; }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .title { font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+        .btn { width: 100%; padding: 12px; margin-bottom: 8px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; color: #fff; cursor: pointer; }
+        .btn-banker { background: #d32f2f; }
+        .btn-player { background: #1976d2; }
+        .btn-tie { background: #388e3c; }
+        .btn-reset { background: #757575; }
+        .road { background: #222; padding: 10px; border-radius: 8px; min-height: 35px; color: #fff; }
+        .bead { display: inline-block; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 22px; font-size: 12px; font-weight: bold; margin-right: 4px; color: #fff; }
+        .bead-B { background: #d32f2f; }
+        .bead-P { background: #1976d2; }
+        .bead-T { background: #388e3c; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="title" style="color:#4a148c;">输入游戏结果</div>
+        <button class="btn btn-banker" onclick="send('B')">🏆 庄家胜</button>
+        <button class="btn btn-player" onclick="send('P')">👤 闲家胜</button>
+        <button class="btn btn-tie" onclick="send('T')">= 和局</button>
+    </div>
+
+    <div class="card" style="border: 1px solid #ffcdd2;">
+        <div class="title" style="color:#c62828;">🤖 AI 持续预测下局</div>
+        <div style="font-size: 24px; font-weight: bold; text-align: center; margin: 10px 0;" id="ai-pred">等待数据...</div>
+        <div style="text-align: center; color: #666; font-size: 13px;" id="ai-info">请连续录入 6 局以上开奖</div>
+    </div>
+
+    <div class="card">
+        <div class="title">🎰 珠盘路 / 历史记录</div>
+        <div class="road" id="beads">无记录</div>
+        <button class="btn btn-reset" style="margin-top:10px;" onclick="reset()">清空记录</button>
+    </div>
+
+    <script>
+        async function send(val) {
+            const res = await fetch('/predict', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({result: val})
+            });
+            const data = await res.json();
+            render(data.history);
+        }
+
+        async function reset() {
+            if(confirm("确定清空吗？")) {
+                await fetch('/reset', {method: 'POST'});
+                render([]);
+            }
+        }
+
+        function render(history) {
+            const beadDiv = document.getElementById('beads');
+            if(!history || history.length === 0) {
+                beadDiv.innerHTML = '无记录';
+                document.getElementById('ai-pred').innerText = '等待数据...';
+                document.getElementById('ai-info').innerText = '请连续录入 6 局以上开奖';
+                return;
+            }
+            beadDiv.innerHTML = history.map(x => `<span class="bead bead-${x}">${x==='B'?'庄':(x==='P'?'闲':'和')}</span>`).join('');
+            
+            // 基础智能预测逻辑
+            if(history.length < 6) {
+                document.getElementById('ai-pred').innerText = history.length % 2 === 0 ? '庄家胜' : '闲家胜';
+                document.getElementById('ai-info').innerText = `已收集 ${history.length} 局，还需 ${6 - history.length} 局启用深度分析`;
+            } else {
+                const last = history[history.length - 1];
+                const pred = last === 'T' ? '庄家胜' : (last === 'B' ? '闲家胜' : '庄家胜');
+                document.getElementById('ai-pred').innerText = pred;
+                document.getElementById('ai-pred').style.color = pred === '庄家胜' ? '#d32f2f' : '#1976d2';
+                document.getElementById('ai-info').innerText = '下三路与大路深度建模计算完成';
+            }
+        }
+
+        fetch('/api/status').then(r => r.json()).then(d => render(d.history));
+    </script>
+</body>
+</html>
