@@ -1,39 +1,24 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, Response
 
 app = Flask(__name__)
 
 class BaccaratCore:
     def __init__(self):
         self.raw_history = []
-        self.predictions = [] # [(prediction, actual_result, is_correct)]
         self.total_predictions = 0
         self.correct_predictions = 0
 
     def reset(self):
         self.raw_history = []
-        self.predictions = []
         self.total_predictions = 0
         self.correct_predictions = 0
 
     def add_result(self, res):
         res = str(res).upper().strip()
         if res not in ['B', 'P', 'T']:
-            return False, "无效的结果格式"
-
-        # 校验上一局预测命中率
-        if self.predictions and self.predictions[-1][1] is None:
-            last_pred = self.predictions[-1][0]
-            if res != 'T': # 和局不计入预测对错统计
-                is_correct = (last_pred == res)
-                self.total_predictions += 1
-                if is_correct:
-                    self.correct_predictions += 1
-                self.predictions[-1] = (last_pred, res, is_correct)
-            else:
-                self.predictions[-1] = (last_pred, 'T', None)
-
+            return False
         self.raw_history.append(res)
-        return True, "成功记录"
+        return True
 
     def build_big_road(self):
         big_road = []
@@ -76,13 +61,16 @@ class BaccaratCore:
             for r_idx in range(len(col)):
                 if (c_idx == 1 and r_idx >= 1) or c_idx >= 2:
                     sym = self.calculate_derived_symbol(big_road, c_idx, r_idx, 1)
-                    if sym: big_eye.append(sym)
+                    if sym:
+                        big_eye.append(sym)
                 if (c_idx == 2 and r_idx >= 1) or c_idx >= 3:
                     sym = self.calculate_derived_symbol(big_road, c_idx, r_idx, 2)
-                    if sym: small.append(sym)
+                    if sym:
+                        small.append(sym)
                 if (c_idx == 3 and r_idx >= 1) or c_idx >= 4:
                     sym = self.calculate_derived_symbol(big_road, c_idx, r_idx, 3)
-                    if sym: cockroach.append(sym)
+                    if sym:
+                        cockroach.append(sym)
         return big_eye, small, cockroach
 
     def ask_road(self, test_side):
@@ -130,8 +118,6 @@ class BaccaratCore:
             risk = "高风险"
             msg = "庄闲问路红蓝呈对冲状态，建议观望或小注轻跟"
 
-        self.predictions.append((suggest, None, None))
-
         return {
             "decision": suggest,
             "confidence": f"{conf:.1f}%",
@@ -145,31 +131,26 @@ class BaccaratCore:
 
 engine = BaccaratCore()
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+HTML_PAGE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>百家乐 AI 深度分析系统</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f9; margin: 0; padding: 15px; color: #333; }
-        .card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .title { font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 15px; }
-        .btn { width: 100%; padding: 14px; margin-bottom: 10px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; color: #fff; cursor: pointer; }
-        .btn-banker { background: linear-gradient(135deg, #d32f2f, #9a0007); }
-        .btn-player { background: linear-gradient(135deg, #1976d2, #004ba0); }
-        .btn-tie { background: linear-gradient(135deg, #388e3c, #00600f); }
-        .btn-reset { background: #757575; margin-top: 5px; }
-        .stat-box { display: flex; justify-content: space-between; background: #eef2f5; padding: 12px; border-radius: 10px; margin-bottom: 8px; }
-        .road-board { overflow-x: auto; white-space: nowrap; background: #222; padding: 8px; border-radius: 8px; color: #fff; font-size: 12px; min-height: 50px; }
-        .bead { inline-block; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 22px; font-size: 12px; font-weight: bold; display: inline-block; margin-right: 4px; color: #fff; }
+        body { font-family: sans-serif; background: #f4f6f9; margin: 0; padding: 15px; color: #333; }
+        .card { background: #fff; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .title { font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+        .btn { width: 100%; padding: 12px; margin-bottom: 8px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; color: #fff; cursor: pointer; }
+        .btn-banker { background: #d32f2f; }
+        .btn-player { background: #1976d2; }
+        .btn-tie { background: #388e3c; }
+        .btn-reset { background: #757575; margin-top: 10px; }
+        .road-board { background: #222; padding: 10px; border-radius: 8px; color: #fff; font-size: 14px; min-height: 40px; }
+        .bead { display: inline-block; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; font-weight: bold; margin-right: 4px; color: #fff; }
         .bead-B { background: #d32f2f; }
         .bead-P { background: #1976d2; }
         .bead-T { background: #388e3c; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
-        .badge-danger { background: #ffebee; color: #c62828; }
-        .badge-success { background: #e8f5e9; color: #2e7d32; }
     </style>
 </head>
 <body>
@@ -179,18 +160,6 @@ HTML_TEMPLATE = """
         <button class="btn btn-banker" onclick="sendResult('B')">🏆 庄家胜</button>
         <button class="btn btn-player" onclick="sendResult('P')">👤 闲家胜</button>
         <button class="btn btn-tie" onclick="sendResult('T')">= 和局</button>
-    </div>
-
-    <div class="card">
-        <div class="title" style="color: #2e7d32;">持续分析命中率</div>
-        <div class="stat-box">
-            <span>总体命中率</span>
-            <strong id="total-rate">0.0%</strong>
-        </div>
-        <div class="stat-box">
-            <span>预测正确手数</span>
-            <strong id="correct-count">0 / 0</strong>
-        </div>
     </div>
 
     <div class="card" style="border: 1px solid #ffcdd2;">
@@ -245,4 +214,35 @@ HTML_TEMPLATE = """
         }
 
         function updateUI(data) {
- 
+            const dec = data.analysis.decision === 'B' ? '庄家胜' : '闲家胜';
+            document.getElementById('ai-decision').innerText = dec;
+            document.getElementById('ai-decision').style.color = data.analysis.decision === 'B' ? '#d32f2f' : '#1976d2';
+            document.getElementById('ai-confidence').innerText = data.analysis.confidence;
+            document.getElementById('ai-risk').innerText = data.analysis.risk_level;
+            document.getElementById('ai-status').innerText = data.analysis.status_msg;
+
+            const ask = data.analysis.ask_road;
+            document.getElementById('b-eye').innerText = ask.if_banker.big_eye || '-';
+            document.getElementById('b-small').innerText = ask.if_banker.small || '-';
+            document.getElementById('b-cock').innerText = ask.if_banker.cockroach || '-';
+            
+            document.getElementById('p-eye').innerText = ask.if_player.big_eye || '-';
+            document.getElementById('p-small').innerText = ask.if_player.small || '-';
+            document.getElementById('p-cock').innerText = ask.if_player.cockroach || '-';
+
+            const beadDiv = document.getElementById('bead-plate');
+            if (data.history.length === 0) {
+                beadDiv.innerHTML = '无记录';
+            } else {
+                beadDiv.innerHTML = data.history.map(x => '<span class="bead bead-' + x + '">' + (x==='B'?'庄':(x==='P'?'闲':'和')) + '</span>').join('');
+            }
+        }
+
+        fetchStatus();
+    </script>
+</body>
+</html>"""
+
+@app.route('/')
+def index():
+    return Response(HTML_PAGE,
